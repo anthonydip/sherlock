@@ -1,0 +1,4 @@
+*.exe
+/bin/
+/sherlock
+build.ps1

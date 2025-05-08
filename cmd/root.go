@@ -33,7 +33,7 @@ func NewRootCmd(versionInfo VersionInfo) *cobra.Command {
 }
 
 func formatVersion(versionInfo VersionInfo) string {
-	return fmt.Sprintf("Sherlock v%s\nBuild Date: %s\nGit Commit: %s",
+	return fmt.Sprintf("Sherlock %s\nBuild Date: %s\nGit Commit: %s",
 		versionInfo.Version,
 		versionInfo.BuildDate,
 		versionInfo.GitCommit)
