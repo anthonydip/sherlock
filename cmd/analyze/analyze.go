@@ -9,17 +9,17 @@ import (
 
 func NewAnalyzeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "analyze",
+		Use:   "analyze [test-output]",
 		Short: "Diagnose test failures",
+		Args:  cobra.ExactArgs(1),
 	}
 
 	// Define analyze command flags
-	cmd.Flags().StringP("test-output", "t", "", "Path to test results")
 	cmd.Flags().StringP("api-key", "k", "", "OpenAI API key")
 	cmd.Flags().StringP("parser", "p", "auto", "Test parser to use (jest, pytest, mocha, auto)")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		testOutput, _ := cmd.Flags().GetString("test-output")
+		testOutput := args[0]
 		// apiKey, _ := cmd.Flags().GetString("api-key")
 		parserName, _ := cmd.Flags().GetString("parser")
 
@@ -29,9 +29,12 @@ func NewAnalyzeCmd() *cobra.Command {
 			return fmt.Errorf("parser error: %w", err)
 		}
 
-		if parser == nil {
-			fmt.Println("PARSER SELECTED!")
+		failures, err := parser.Parse()
+		if err != nil {
+			return fmt.Errorf("parser error: %w", err)
 		}
+
+		fmt.Println(failures)
 
 		return nil
 	}

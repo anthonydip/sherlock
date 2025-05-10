@@ -17,7 +17,6 @@ type Parser interface {
 func GetParser(name string, filePath string) (Parser, error) {
 	switch name {
 	case "jest":
-		fmt.Println("JEST PARSER SELECTED")
 		return NewJestParser(filePath), nil
 	case "auto":
 		return DetectParser(filePath)
