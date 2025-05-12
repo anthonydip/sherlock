@@ -34,8 +34,6 @@ func NewAnalyzeCmd() *cobra.Command {
 			return fmt.Errorf("parser error: %w", err)
 		}
 
-		fmt.Println(failures)
-
 		return nil
 	}
 

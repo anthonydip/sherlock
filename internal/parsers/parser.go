@@ -3,10 +3,11 @@ package parsers
 import "fmt"
 
 type TestFailure struct {
-	Name    string
-	Message string
-	File    string
-	Line    int
+	File        string
+	TestName    string
+	Error       string
+	Location    string
+	FullMessage string
 }
 
 type Parser interface {
