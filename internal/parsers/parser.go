@@ -1,6 +1,8 @@
 package parsers
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type TestFailure struct {
 	File        string

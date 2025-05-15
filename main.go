@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/anthonydip/sherlock/cmd"
@@ -21,9 +20,10 @@ func main() {
 	}
 
 	rootCmd := cmd.NewRootCmd(versionInfo)
+	rootCmd.SilenceUsage = true
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		// fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

@@ -11,11 +11,9 @@ type JestTestOutput struct {
 	NumTodoTests              int         `json:"numTodoTests"`
 	NumTotalTestSuites        int         `json:"numTotalTestSuites"`
 	NumTotalTests             int         `json:"numTotalTests"`
-	OpenHandles               []string    `json:"openHandles"`
 	StartTime                 int64       `json:"startTime"`
 	Success                   bool        `json:"success"`
 	TestResults               []TestSuite `json:"testResults"`
-	WasInterrupted            bool        `json:"wasInterrupted"`
 }
 
 type TestSuite struct {

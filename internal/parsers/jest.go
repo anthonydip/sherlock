@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -14,7 +15,9 @@ type JestParser struct {
 }
 
 func NewJestParser(filePath string) *JestParser {
-	return &JestParser{filePath: filePath}
+	return &JestParser{
+		filePath: filePath,
+	}
 }
 
 func (j *JestParser) Parse() ([]TestFailure, error) {
@@ -136,6 +139,24 @@ func extractErrorDetails(message string) (string, string) {
 	return errorMsg, location
 }
 
+func normalizePath(path string) string {
+	// If path is already absolute (starts with drive letter or slash)
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	// If path is relative but contains standard Jest paths
+	if strings.HasPrefix(path, "src/") || strings.HasPrefix(path, "tests/") {
+		// Make it absolute by joining with current working directory
+		if absPath, err := filepath.Abs(path); err == nil {
+			return absPath
+		}
+	}
+
+	// Default return (will handle cases like "src/file.js:123")
+	return path
+}
+
 func findLocation(message string) string {
 	// Format 1: "at function (file:line:column)"
 	re1 := regexp.MustCompile(`at .*?\((.*?):(\d+):(\d+)\)`)
@@ -145,11 +166,11 @@ func findLocation(message string) string {
 	for _, line := range strings.Split(message, "\n") {
 		// Try first format
 		if matches := re1.FindStringSubmatch(line); len(matches) > 3 && isProjectFile(matches[1]) {
-			return fmt.Sprintf("%s:%s", matches[1], matches[2])
+			return normalizePath(fmt.Sprintf("%s:%s", matches[1], matches[2]))
 		}
 		// Try second format
 		if matches := re2.FindStringSubmatch(line); len(matches) > 3 && isProjectFile(matches[1]) {
-			return fmt.Sprintf("%s:%s", matches[1], matches[2])
+			return normalizePath(fmt.Sprintf("%s:%s", matches[1], matches[2]))
 		}
 	}
 	return ""
