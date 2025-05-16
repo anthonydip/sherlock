@@ -2,12 +2,15 @@ package parsers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/anthonydip/sherlock/internal/logger"
 )
 
 type JestParser struct {
@@ -21,24 +24,43 @@ func NewJestParser(filePath string) *JestParser {
 }
 
 func (j *JestParser) Parse() ([]TestFailure, error) {
+	logger.GlobalLogger.Debugf("Parsing Jest output from: %s", j.filePath)
+
 	data, err := os.Open(j.filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("test file does not exist: %q", j.filePath)
+		} else if os.IsPermission(err) {
+			return nil, fmt.Errorf("no permission to read file: %q", j.filePath)
+		}
+		return nil, fmt.Errorf("failed to access test file: %w", err)
 	}
 	defer data.Close()
 
 	byteValue, err := io.ReadAll(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return nil, fmt.Errorf("file appears truncated or corrupted")
+		}
+		if pathErr := (&os.PathError{}); errors.As(err, &pathErr) {
+			return nil, fmt.Errorf("lost access to file while reading: %w", err)
+		}
+		return nil, fmt.Errorf("failed to read test file contents: %w", err)
 	}
+	logger.GlobalLogger.Debugf("Read %d bytes from test file", len(byteValue))
 
 	var output JestTestOutput
 	if err := json.Unmarshal(byteValue, &output); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return nil, fmt.Errorf("expected valid JSON test output, but got malformed data")
 	}
+
+	logger.GlobalLogger.Verbosef("Found %d test suites", len(output.TestResults))
 
 	var failures []TestFailure
 	for _, suite := range output.TestResults {
+		// NOTE: suite.Name gives the name of the file with the test cases
+		logger.GlobalLogger.Debugf("Processing suite: %s", suite.Name)
+
 		// First check suite-level message which might contain aggregated errors
 		if len(suite.AssertionResults) == 0 && suite.Message != "" {
 			if cleanMsg, location := extractErrorDetails(suite.Message); cleanMsg != "" {
@@ -55,6 +77,8 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 		// Then process individual test results
 		for _, test := range suite.AssertionResults {
 			if test.Status == "failed" {
+				logger.GlobalLogger.Verbosef("Processing failed test: %s", test.Title)
+
 				// Handle both FailureMessages and FailureDetails
 				if len(test.FailureMessages) > 0 {
 					for _, msg := range test.FailureMessages {
@@ -72,6 +96,7 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 		}
 	}
 
+	logger.GlobalLogger.Verbosef("Found %d total failures", len(failures))
 	return failures, nil
 }
 

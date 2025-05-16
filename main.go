@@ -21,9 +21,9 @@ func main() {
 
 	rootCmd := cmd.NewRootCmd(versionInfo)
 	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
 
 	if err := rootCmd.Execute(); err != nil {
-		// fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

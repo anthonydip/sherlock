@@ -2,6 +2,8 @@ package parsers
 
 import (
 	"fmt"
+
+	"github.com/anthonydip/sherlock/internal/logger"
 )
 
 type TestFailure struct {
@@ -18,12 +20,15 @@ type Parser interface {
 }
 
 func GetParser(name string, filePath string) (Parser, error) {
+	logger.GlobalLogger.Debugf("Attempting to get parser for '%s' with name '%s'", filePath, name)
 	switch name {
 	case "jest":
+		logger.GlobalLogger.Verbosef("Using Jest parser")
 		return NewJestParser(filePath), nil
 	case "auto":
+		logger.GlobalLogger.Verbosef("Attempting parser auto-detection")
 		return DetectParser(filePath)
 	default:
-		return nil, fmt.Errorf("unknown parser: %s", name)
+		return nil, fmt.Errorf("unknown parser '%s'", name)
 	}
 }
