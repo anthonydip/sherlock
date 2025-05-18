@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/anthonydip/sherlock/internal/cli"
 	"github.com/anthonydip/sherlock/internal/logger"
 	"github.com/anthonydip/sherlock/internal/parsers"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func NewAnalyzeCmd() *cobra.Command {
@@ -15,23 +17,28 @@ func NewAnalyzeCmd() *cobra.Command {
 		Short: "Diagnose test failures",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				fmt.Fprintf(os.Stderr, "[ERROR] Requires exactly 1 test file\n\n")
-				fmt.Fprintf(os.Stderr, "Usage: sherlock analyze [test-output] [flags]\n")
+				fmt.Fprintf(os.Stderr, "error: no test file specified\n")
+				groups := generateOptionGroups(cmd)
+				fmt.Fprint(os.Stderr, cli.FormatSubcommandUsage(cmd, groups))
 				return fmt.Errorf("Requires exactly 1 test file")
 			}
 			return nil
 		},
 	}
 
+	// Define analyze command flags
+	cmd.Flags().StringP("api-key", "k", "", "OpenAI api key")
+	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
+
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		fmt.Fprintf(os.Stderr, "[ERROR] Invalid flag: %v\n\n", err)
-		fmt.Fprintf(os.Stderr, "Run '%s --help' for usage\n", cmd.CommandPath())
+		option := cli.StripInvalidFlag(err)
+
+		groups := generateOptionGroups(cmd)
+
+		fmt.Fprintf(os.Stderr, "unknown option: %s\n", option)
+		fmt.Fprint(os.Stderr, cli.FormatSubcommandUsage(cmd, groups))
 		return nil
 	})
-
-	// Define analyze command flags
-	cmd.Flags().StringP("api-key", "k", "", "OpenAI API key")
-	cmd.Flags().StringP("parser", "p", "auto", "Test parser to use (jest, pytest, mocha, auto)")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		testOutput := args[0]
@@ -67,4 +74,23 @@ func NewAnalyzeCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func generateOptionGroups(cmd *cobra.Command) []cli.FlagGroup {
+	groups := []cli.FlagGroup{
+		{
+			Name: "Parser options",
+			Flags: []*pflag.Flag{
+				cmd.Flags().Lookup("parser"),
+			},
+		},
+		{
+			Name: "AI options",
+			Flags: []*pflag.Flag{
+				cmd.Flags().Lookup("api-key"),
+			},
+		},
+	}
+
+	return groups
 }
