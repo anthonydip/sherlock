@@ -54,7 +54,7 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 		return nil, fmt.Errorf("expected valid JSON test output, but got malformed data")
 	}
 
-	logger.GlobalLogger.Verbosef("Found %d test suites", len(output.TestResults))
+	logger.GlobalLogger.Verbosef("Found %d test suite(s)", len(output.TestResults))
 
 	var failures []TestFailure
 	for _, suite := range output.TestResults {

@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/anthonydip/sherlock/cmd/analyze"
 	"github.com/anthonydip/sherlock/internal/logger"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type VersionInfo struct {
@@ -61,8 +63,25 @@ func NewRootCmd(versionInfo VersionInfo) *cobra.Command {
 	rootCmd.Flags().BoolP("version", "v", false, "Print version")
 
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		fmt.Fprintf(os.Stderr, "[ERROR] Invalid flag: %v\n\n", err)
-		fmt.Fprintf(os.Stderr, "Run '%s --help' for usage\n", cmd.CommandPath())
+		var option string
+
+		switch {
+		case strings.Contains(err.Error(), "unknown shorthand flag"):
+			parts := strings.Split(err.Error(), "'")
+			if len(parts) > 1 {
+				option = "-" + parts[1]
+			}
+		case strings.Contains(err.Error(), "unknown flag"):
+			parts := strings.Split(err.Error(), " ")
+			if len(parts) > 2 {
+				option = parts[2]
+			}
+		default:
+			option = err.Error()
+		}
+
+		fmt.Fprintf(os.Stderr, "unknown option: %s\n", option)
+		fmt.Fprintf(os.Stderr, "%s\n", formatStyleUsage(cmd))
 		return nil
 	})
 
@@ -78,4 +97,58 @@ func formatVersion(versionInfo VersionInfo) string {
 		versionInfo.Version,
 		versionInfo.BuildDate,
 		versionInfo.GitCommit)
+}
+
+func formatStyleUsage(cmd *cobra.Command) string {
+	usage := fmt.Sprintf("usage: %s", cmd.CommandPath())
+	padding := strings.Repeat(" ", len(usage)+1)
+
+	var flagGroups []string
+	cmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Shorthand != "" {
+			flagGroups = append(flagGroups, fmt.Sprintf("[-%s | --%s]", flag.Shorthand, flag.Name))
+		} else {
+			flagGroups = append(flagGroups, fmt.Sprintf("[--%s]", flag.Name))
+		}
+	})
+
+	// Build lines ensuring no flag group is split
+	maxWidth := 80
+	currentLine := usage + " "
+	var lines []string
+
+	for _, group := range flagGroups {
+		if len(currentLine)+len(group)+1 > maxWidth {
+			// If we're not on the first line, add padding
+			if len(lines) > 0 {
+				currentLine = padding + currentLine[len(usage)+1:]
+			}
+			lines = append(lines, currentLine)
+			currentLine = padding + group
+		} else {
+			if currentLine != usage+" " {
+				currentLine += " "
+			}
+			currentLine += group
+		}
+	}
+
+	commandPart := "<command> [<args>]"
+	if len(currentLine)+1+len(commandPart) <= maxWidth {
+		currentLine += " " + commandPart
+	} else {
+		if currentLine != "" {
+			if len(lines) > 0 {
+				currentLine = padding + currentLine[len(usage)+1:]
+			}
+			lines = append(lines, currentLine)
+		}
+		currentLine = padding + commandPart
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return strings.Join(lines, "\n")
 }
