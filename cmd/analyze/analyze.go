@@ -1,10 +1,12 @@
 package analyze
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/anthonydip/sherlock/internal/cli"
+	"github.com/anthonydip/sherlock/internal/git"
 	"github.com/anthonydip/sherlock/internal/logger"
 	"github.com/anthonydip/sherlock/internal/parsers"
 	"github.com/spf13/cobra"
@@ -29,6 +31,7 @@ func NewAnalyzeCmd() *cobra.Command {
 	// Define analyze command flags
 	cmd.Flags().StringP("api-key", "k", "", "OpenAI api key")
 	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
+	cmd.Flags().Bool("force", false, "proceed analysis with uncommitted changes")
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		option := cli.StripInvalidFlag(err)
@@ -44,6 +47,7 @@ func NewAnalyzeCmd() *cobra.Command {
 		testOutput := args[0]
 		// apiKey, _ := cmd.Flags().GetString("api-key")
 		parserName, _ := cmd.Flags().GetString("parser")
+		force, _ := cmd.Flags().GetBool("force")
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
 
@@ -67,6 +71,36 @@ func NewAnalyzeCmd() *cobra.Command {
 		} else {
 			logger.GlobalLogger.Successf("All test cases passed, no failures found")
 			return nil
+		}
+
+		repo, err := git.OpenRepository(".")
+		skipGit := err != nil
+		if err != nil {
+			if errors.Is(err, git.ErrNotAGitRepository) {
+				logger.GlobalLogger.Warnf("Not running in a Git repository, skipping Git analysis")
+			} else {
+				logger.GlobalLogger.Errorf("Git error: %v", err)
+				return fmt.Errorf("git error: %v", err)
+			}
+		}
+
+		// Run Git analysis if running in a Git repository
+		if !skipGit {
+			// Check for uncommitted changes
+			dirty, err := repo.IsDirty()
+			if err != nil {
+				logger.GlobalLogger.Errorf("Failed to check repo status: %v", err)
+				return fmt.Errorf("git error: %v", err)
+			}
+
+			if dirty {
+				if force {
+					logger.GlobalLogger.Warnf("Uncommitted changes detected, proceeding with analysis")
+				} else {
+					logger.GlobalLogger.Errorf("Uncommitted changes detected (--use force to override)")
+					return fmt.Errorf("uncommitted changes detected")
+				}
+			}
 		}
 
 		logger.GlobalLogger.Successf("Analysis completed")
