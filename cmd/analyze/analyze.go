@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/anthonydip/sherlock/internal/cli"
 	"github.com/anthonydip/sherlock/internal/git"
@@ -33,6 +34,7 @@ func NewAnalyzeCmd() *cobra.Command {
 	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
 	cmd.Flags().Int("depth", 5, "maximum parent directory levels to search for .git (default = 5)")
 	cmd.Flags().Bool("force", false, "proceed analysis with uncommitted changes")
+	cmd.Flags().Bool("no-git", false, "skip Git integration entirely (repository detection and change analysis)")
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		option := cli.StripInvalidFlag(err)
@@ -50,6 +52,7 @@ func NewAnalyzeCmd() *cobra.Command {
 		parserName, _ := cmd.Flags().GetString("parser")
 		force, _ := cmd.Flags().GetBool("force")
 		depth, _ := cmd.Flags().GetInt("depth")
+		noGit, _ := cmd.Flags().GetBool("no-git")
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
 
@@ -75,33 +78,35 @@ func NewAnalyzeCmd() *cobra.Command {
 			return nil
 		}
 
-		repo, err := git.OpenRepository(".", depth)
-		skipGit := err != nil
-		if err != nil {
-			if errors.Is(err, git.ErrNotAGitRepository) {
-				logger.GlobalLogger.Verbosef("Unable to detect a Git repository within depth of %d (use --depth to change)", depth)
-				logger.GlobalLogger.Warnf("Not running in a Git repository, skipping Git analysis")
-			} else {
-				logger.GlobalLogger.Errorf("Git error: %v", err)
-				return fmt.Errorf("git error: %v", err)
-			}
-		}
-
-		// Run Git analysis if running in a Git repository
-		if !skipGit {
-			// Check for uncommitted changes
-			dirty, err := repo.IsDirty()
+		if !noGit {
+			repo, err := git.OpenRepository(filepath.Dir(testOutput), depth)
+			skipGit := err != nil
 			if err != nil {
-				logger.GlobalLogger.Errorf("Failed to check repo status: %v", err)
-				return fmt.Errorf("git error: %v", err)
+				if errors.Is(err, git.ErrNotAGitRepository) {
+					logger.GlobalLogger.Verbosef("Unable to detect a Git repository within depth of %d (use --depth to change)", depth)
+					logger.GlobalLogger.Warnf("Not running in a Git repository, skipping Git analysis")
+				} else {
+					logger.GlobalLogger.Errorf("Git error: %v", err)
+					return fmt.Errorf("git error: %v", err)
+				}
 			}
 
-			if dirty {
-				if force {
-					logger.GlobalLogger.Warnf("Uncommitted changes detected, proceeding with analysis")
-				} else {
-					logger.GlobalLogger.Errorf("Uncommitted changes detected (use --force to override)")
-					return fmt.Errorf("uncommitted changes detected")
+			// Run Git analysis if running in a Git repository
+			if !skipGit {
+				// Check for uncommitted changes
+				dirty, err := repo.IsDirty()
+				if err != nil {
+					logger.GlobalLogger.Errorf("Failed to check repo status: %v", err)
+					return fmt.Errorf("git error: %v", err)
+				}
+
+				if dirty {
+					if force {
+						logger.GlobalLogger.Warnf("Uncommitted changes detected, proceeding with analysis")
+					} else {
+						logger.GlobalLogger.Errorf("Uncommitted changes detected (use --force to override)")
+						return fmt.Errorf("uncommitted changes detected")
+					}
 				}
 			}
 		}

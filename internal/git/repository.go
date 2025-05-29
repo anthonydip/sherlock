@@ -24,9 +24,16 @@ func OpenRepository(path string, depth int) (*Repository, error) {
 		return nil, err
 	}
 
-	repoPath, err := findRepositoryRoot(absPath, depth)
+	repoPath, err := findRepositoryRoot(filepath.Dir(absPath), depth)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify test file is within the repository
+	relPath, err := filepath.Rel(repoPath, absPath)
+	if err != nil || strings.HasPrefix(relPath, "../") {
+		logger.GlobalLogger.Debugf("Test file %s is outside repository %s", absPath, repoPath)
+		return nil, ErrNotAGitRepository
 	}
 
 	logger.GlobalLogger.Verbosef("Opening Git repository at: %s", repoPath)
@@ -46,6 +53,7 @@ func OpenRepository(path string, depth int) (*Repository, error) {
 	}, nil
 }
 
+// Searches parent directories to find a Git repository given depth
 func findRepositoryRoot(startPath string, depth int) (string, error) {
 	current := startPath
 
