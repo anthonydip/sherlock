@@ -24,6 +24,8 @@ func OpenRepository(path string) (*Repository, error) {
 		return nil, err
 	}
 
+	logger.GlobalLogger.Verbosef("Opening Git repository at: %s", absPath)
+
 	// Verify that the path exists
 	if _, err := os.Stat(absPath); err != nil {
 		return nil, ErrNotAGitRepository
@@ -50,6 +52,8 @@ func (r *Repository) Path() string {
 
 // Check for uncomitted changes in working tree
 func (r *Repository) IsDirty() (bool, error) {
+	logger.GlobalLogger.Verbosef("Checking repository status at: %s", r.path)
+
 	w, err := r.repo.Worktree()
 	if err != nil {
 		return false, fmt.Errorf("failed to get worktree: %w", err)
@@ -107,9 +111,9 @@ func (r *Repository) IsDirty() (bool, error) {
 	}
 
 	if hasChanges {
-		logger.GlobalLogger.Debugf("Repository is dirty, uncommitted changes detected")
+		logger.GlobalLogger.Verbosef("Repository is dirty, uncommitted changes detected")
 	} else {
-		logger.GlobalLogger.Debugf("Repository is clean, no uncommitted changes")
+		logger.GlobalLogger.Verbosef("Repository is clean, no uncommitted changes")
 	}
 
 	return hasChanges, nil
