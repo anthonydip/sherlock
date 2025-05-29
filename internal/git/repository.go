@@ -18,21 +18,21 @@ type Repository struct {
 }
 
 // Open Git repository at the given path
-func OpenRepository(path string) (*Repository, error) {
+func OpenRepository(path string, depth int) (*Repository, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.GlobalLogger.Verbosef("Opening Git repository at: %s", absPath)
-
-	// Verify that the path exists
-	if _, err := os.Stat(absPath); err != nil {
-		return nil, ErrNotAGitRepository
+	repoPath, err := findRepositoryRoot(absPath, depth)
+	if err != nil {
+		return nil, err
 	}
 
+	logger.GlobalLogger.Verbosef("Opening Git repository at: %s", repoPath)
+
 	// Open with go-git
-	repo, err := git.PlainOpen(absPath)
+	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		if errors.Is(err, git.ErrRepositoryNotExists) {
 			return nil, ErrNotAGitRepository
@@ -41,9 +41,44 @@ func OpenRepository(path string) (*Repository, error) {
 	}
 
 	return &Repository{
-		path: absPath,
+		path: repoPath,
 		repo: repo,
 	}, nil
+}
+
+func findRepositoryRoot(startPath string, depth int) (string, error) {
+	current := startPath
+
+	logger.GlobalLogger.Debugf("Searching for Git repository root with maximum depth of %d", depth)
+
+	for i := 0; i < depth; i++ {
+		gitPath := filepath.Join(current, ".git")
+
+		logger.GlobalLogger.Debugf("Checking for Git repository at: %s", gitPath)
+
+		// Check if .git exists
+		if fi, err := os.Stat(gitPath); err == nil {
+			if fi.IsDir() {
+				return current, nil
+			}
+
+			// Handle git submodules
+			if content, err := os.ReadFile(gitPath); err == nil {
+				if strings.HasPrefix(string(content), "gitdir: ") {
+					return current, nil
+				}
+			}
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(current)
+		if parent == current {
+			break // Reached filesystem root
+		}
+		current = parent
+	}
+
+	return "", ErrNotAGitRepository
 }
 
 func (r *Repository) Path() string {

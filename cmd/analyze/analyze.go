@@ -31,6 +31,7 @@ func NewAnalyzeCmd() *cobra.Command {
 	// Define analyze command flags
 	cmd.Flags().StringP("api-key", "k", "", "OpenAI api key")
 	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
+	cmd.Flags().Int("depth", 5, "maximum parent directory levels to search for .git (default = 5)")
 	cmd.Flags().Bool("force", false, "proceed analysis with uncommitted changes")
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
@@ -48,6 +49,7 @@ func NewAnalyzeCmd() *cobra.Command {
 		// apiKey, _ := cmd.Flags().GetString("api-key")
 		parserName, _ := cmd.Flags().GetString("parser")
 		force, _ := cmd.Flags().GetBool("force")
+		depth, _ := cmd.Flags().GetInt("depth")
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
 
@@ -73,10 +75,11 @@ func NewAnalyzeCmd() *cobra.Command {
 			return nil
 		}
 
-		repo, err := git.OpenRepository(".")
+		repo, err := git.OpenRepository(".", depth)
 		skipGit := err != nil
 		if err != nil {
 			if errors.Is(err, git.ErrNotAGitRepository) {
+				logger.GlobalLogger.Verbosef("Unable to detect a Git repository within depth of %d (use --depth to change)", depth)
 				logger.GlobalLogger.Warnf("Not running in a Git repository, skipping Git analysis")
 			} else {
 				logger.GlobalLogger.Errorf("Git error: %v", err)
@@ -97,7 +100,7 @@ func NewAnalyzeCmd() *cobra.Command {
 				if force {
 					logger.GlobalLogger.Warnf("Uncommitted changes detected, proceeding with analysis")
 				} else {
-					logger.GlobalLogger.Errorf("Uncommitted changes detected (--use force to override)")
+					logger.GlobalLogger.Errorf("Uncommitted changes detected (use --force to override)")
 					return fmt.Errorf("uncommitted changes detected")
 				}
 			}
