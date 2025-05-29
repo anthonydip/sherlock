@@ -82,13 +82,23 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 				// Handle both FailureMessages and FailureDetails
 				if len(test.FailureMessages) > 0 {
 					for _, msg := range test.FailureMessages {
-						failures = append(failures, extractFailure(suite, test, msg))
+						extractedFail := extractFailure(suite, test, msg)
+						logger.GlobalLogger.Debugf("Extracted file name: %s", extractedFail.File)
+						logger.GlobalLogger.Debugf("Extracted test name: %s", extractedFail.TestName)
+						logger.GlobalLogger.Debugf("Extracted error: %s", extractedFail.Error)
+						logger.GlobalLogger.Debugf("Extracted location: %s", extractedFail.Location)
+						failures = append(failures, extractedFail)
 					}
 				} else if len(test.FailureDetails) > 0 {
 					for _, detail := range test.FailureDetails {
 						if detail.MatcherResult != nil {
 							msg := detail.MatcherResult.Message
-							failures = append(failures, extractFailure(suite, test, msg))
+							extractedFail := extractFailure(suite, test, msg)
+							logger.GlobalLogger.Debugf("Extracted file name: %s", extractedFail.File)
+							logger.GlobalLogger.Debugf("Extracted test name: %s", extractedFail.TestName)
+							logger.GlobalLogger.Debugf("Extracted error: %s", extractedFail.Error)
+							logger.GlobalLogger.Debugf("Extracted location: %s", extractedFail.Location)
+							failures = append(failures, extractedFail)
 						}
 					}
 				}
