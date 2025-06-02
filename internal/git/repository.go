@@ -89,10 +89,6 @@ func findRepositoryRoot(startPath string, depth int) (string, error) {
 	return "", ErrNotAGitRepository
 }
 
-func (r *Repository) Path() string {
-	return r.path
-}
-
 // Check for uncomitted changes in working tree
 func (r *Repository) IsDirty() (bool, error) {
 	logger.GlobalLogger.Verbosef("Checking repository status at: %s", r.path)
@@ -207,4 +203,8 @@ func (r *Repository) hasActualContentChanges(path string) (bool, error) {
 
 	logger.GlobalLogger.Debugf("Content differences found in: %s", path)
 	return true, nil
+}
+
+func (r *Repository) Path() string {
+	return r.path
 }

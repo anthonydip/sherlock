@@ -78,7 +78,11 @@ func NewAnalyzeCmd() *cobra.Command {
 			return nil
 		}
 
-		if !noGit {
+		if noGit {
+			logger.GlobalLogger.Verbosef("--no-git used, skipping Git integration")
+		} else {
+
+			// Attempt to open the Git repository
 			repo, err := git.OpenRepository(filepath.Dir(testOutput), depth)
 			skipGit := err != nil
 			if err != nil {
@@ -100,6 +104,7 @@ func NewAnalyzeCmd() *cobra.Command {
 					return fmt.Errorf("git error: %v", err)
 				}
 
+				// If any uncommitted changes were found
 				if dirty {
 					if force {
 						logger.GlobalLogger.Warnf("Uncommitted changes detected, proceeding with analysis")
@@ -108,6 +113,17 @@ func NewAnalyzeCmd() *cobra.Command {
 						return fmt.Errorf("uncommitted changes detected")
 					}
 				}
+
+				// Get commit history for the affected files
+				for _, failure := range failures {
+					// Convert absolute path to repo-relative path
+					relPath, err := git.NormalizeTestPath(failure.Location, repo.Path())
+					if err != nil {
+						logger.GlobalLogger.Debugf("error")
+						continue
+					}
+				}
+
 			}
 		}
 
@@ -130,6 +146,14 @@ func generateOptionGroups(cmd *cobra.Command) []cli.FlagGroup {
 			Name: "AI options",
 			Flags: []*pflag.Flag{
 				cmd.Flags().Lookup("api-key"),
+			},
+		},
+		{
+			Name: "Git options",
+			Flags: []*pflag.Flag{
+				cmd.Flags().Lookup("depth"),
+				cmd.Flags().Lookup("force"),
+				cmd.Flags().Lookup("no-git"),
 			},
 		},
 	}
