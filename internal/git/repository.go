@@ -12,11 +12,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-type Repository struct {
-	path string
-	repo *git.Repository
-}
-
 // Open Git repository at the given path
 func OpenRepository(path string, depth int) (*Repository, error) {
 	absPath, err := filepath.Abs(path)

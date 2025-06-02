@@ -119,8 +119,28 @@ func NewAnalyzeCmd() *cobra.Command {
 					// Convert absolute path to repo-relative path
 					relPath, err := git.NormalizeTestPath(failure.Location, repo.Path())
 					if err != nil {
-						logger.GlobalLogger.Debugf("error")
+						logger.GlobalLogger.Errorf("Failed to normalize path: %v", err)
 						continue
+					}
+
+					logger.GlobalLogger.Debugf("Analyzing failure in: %s", relPath)
+
+					commitHistory, err := repo.GetEnhancedFileHistory(relPath, 3)
+					if err != nil {
+						logger.GlobalLogger.Errorf("Failed to get commit history: %v", err)
+						return err
+					}
+
+					// Log the commit information
+					for _, commit := range commitHistory {
+						logger.GlobalLogger.Verbosef("Related commit for %s: %s by %s at %s",
+							failure.TestName,
+							commit.Hash[:7],
+							commit.Author,
+							commit.Date.Format("2006-01-02"),
+						)
+						logger.GlobalLogger.Debugf("Commit message: %s", commit.Message)
+						logger.GlobalLogger.Debugf("Files changed: %v", commit.Changes)
 					}
 				}
 
