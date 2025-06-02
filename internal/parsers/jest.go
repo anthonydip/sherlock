@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/anthonydip/sherlock/internal/logger"
@@ -87,6 +88,7 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 						logger.GlobalLogger.Debugf("Extracted test name: %s", extractedFail.TestName)
 						logger.GlobalLogger.Debugf("Extracted error: %s", extractedFail.Error)
 						logger.GlobalLogger.Debugf("Extracted location: %s", extractedFail.Location)
+						logger.GlobalLogger.Debugf("Extracted line number: %d", extractedFail.LineNumber)
 						failures = append(failures, extractedFail)
 					}
 				} else if len(test.FailureDetails) > 0 {
@@ -98,6 +100,7 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 							logger.GlobalLogger.Debugf("Extracted test name: %s", extractedFail.TestName)
 							logger.GlobalLogger.Debugf("Extracted error: %s", extractedFail.Error)
 							logger.GlobalLogger.Debugf("Extracted location: %s", extractedFail.Location)
+							logger.GlobalLogger.Debugf("Extracted line number: %d", extractedFail.LineNumber)
 							failures = append(failures, extractedFail)
 						}
 					}
@@ -116,23 +119,27 @@ func extractFailure(suite TestSuite, test AssertionResult, message string) TestF
 	// First try to extract underlying error from matcher format
 	if underlying := extractUnderlyingError(cleanMsg); underlying != "" {
 		location := findLocation(cleanMsg)
+		lineNumber := extractLineNumber(location)
 		return TestFailure{
 			File:        suite.Name,
 			TestName:    buildTestName(test.AncestorTitles, test.Title),
 			Error:       underlying,
 			Location:    location,
 			FullMessage: cleanMsg,
+			LineNumber:  lineNumber,
 		}
 	}
 
 	// Fall back to standard error extraction
 	errorMsg, location := extractErrorDetails(cleanMsg)
+	lineNumber := extractLineNumber(location)
 	return TestFailure{
 		File:        suite.Name,
 		TestName:    buildTestName(test.AncestorTitles, test.Title),
 		Error:       errorMsg,
 		Location:    location,
 		FullMessage: cleanMsg,
+		LineNumber:  lineNumber,
 	}
 }
 
@@ -222,13 +229,15 @@ func isProjectFile(path string) bool {
 	return true
 }
 
-func extractLineNumber(line string) string {
-	re := regexp.MustCompile(`:(\d+):\d+\)`)
-	matches := re.FindStringSubmatch(line)
-	if len(matches) > 1 {
-		return ":" + matches[1]
+func extractLineNumber(location string) int {
+	result := strings.Split(location, ":")
+	i, err := strconv.Atoi(result[len(result)-1])
+	if err != nil {
+		logger.GlobalLogger.Debugf("Failed to extract line number from: %s", location)
+		return 0
 	}
-	return ""
+
+	return i
 }
 
 func buildTestName(ancestors []string, title string) string {

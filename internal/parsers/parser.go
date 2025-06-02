@@ -12,6 +12,7 @@ type TestFailure struct {
 	Error       string
 	Location    string
 	FullMessage string
+	LineNumber  int
 }
 
 type Parser interface {
