@@ -33,7 +33,9 @@ func NewAnalyzeCmd() *cobra.Command {
 	// Define analyze command flags
 	cmd.Flags().StringP("api-key", "k", "", "OpenAI api key")
 	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
-	cmd.Flags().Int("depth", 5, "maximum parent directory levels to search for .git (default = 5)")
+	cmd.Flags().Int("git-depth", 5, "maximum parent directory levels to search for .git (default: 5)")
+	cmd.Flags().Int("context-lines", 3, "number of surrounding code lines to include in analysis (default: 3)")
+	cmd.Flags().Int("commit-depth", 3, "number of historical commits to analyze (default: 3)")
 	cmd.Flags().Bool("force", false, "proceed analysis with uncommitted changes")
 	cmd.Flags().Bool("no-git", false, "skip Git integration entirely (repository detection and change analysis)")
 
@@ -52,7 +54,9 @@ func NewAnalyzeCmd() *cobra.Command {
 		// apiKey, _ := cmd.Flags().GetString("api-key")
 		parserName, _ := cmd.Flags().GetString("parser")
 		force, _ := cmd.Flags().GetBool("force")
-		depth, _ := cmd.Flags().GetInt("depth")
+		depth, _ := cmd.Flags().GetInt("git-depth")
+		contextLines, _ := cmd.Flags().GetInt("context-lines")
+		commitDepth, _ := cmd.Flags().GetInt("commit-depth")
 		noGit, _ := cmd.Flags().GetBool("no-git")
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
@@ -127,7 +131,7 @@ func NewAnalyzeCmd() *cobra.Command {
 					logger.GlobalLogger.Debugf("Failure %d - Analyzing failure in: %s", index+1, relPath)
 
 					// Get Git commit history for the affected file
-					commitHistory, err := repo.GetEnhancedFileHistory(relPath, 3)
+					commitHistory, err := repo.GetEnhancedFileHistory(relPath, commitDepth)
 					if err != nil {
 						logger.GlobalLogger.Errorf("Failure %d - Failed to get commit history: %v", index+1, err)
 						return err
@@ -159,7 +163,7 @@ func NewAnalyzeCmd() *cobra.Command {
 
 						// Get code context around the line-specific change
 						absPath := filepath.Join(repo.Path(), relPath)
-						context, err := repo.GetCodeContext(absPath, failure.LineNumber, 3)
+						context, err := repo.GetCodeContext(absPath, failure.LineNumber, contextLines)
 						if err != nil {
 							logger.GlobalLogger.Debugf("Failure %d - Failed to get code context: %v", index+1, err)
 						} else {
@@ -176,7 +180,7 @@ func NewAnalyzeCmd() *cobra.Command {
 						}
 
 						// Get commits that modified this line
-						lineCommits, err := repo.GetCommitsAffectingLines(relPath, []int{failure.LineNumber}, 3)
+						lineCommits, err := repo.GetCommitsAffectingLines(relPath, []int{failure.LineNumber}, commitDepth)
 						if err != nil {
 							logger.GlobalLogger.Debugf("Failure %d - Failed to get line-specific commits: %v", index+1, err)
 						} else {
