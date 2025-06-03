@@ -157,6 +157,24 @@ func NewAnalyzeCmd() *cobra.Command {
 							failure.CodeChanges = lineChanges
 						}
 
+						// Get code context around the line-specific change
+						absPath := filepath.Join(repo.Path(), relPath)
+						context, err := repo.GetCodeContext(absPath, failure.LineNumber, 3)
+						if err != nil {
+							logger.GlobalLogger.Debugf("Failure %d - Failed to get code context: %v", index+1, err)
+						} else {
+							failure.Context.SurroundingCode = context
+							logger.GlobalLogger.Debugf("Failure %d - Code context:\n%s", index+1, context)
+						}
+
+						// Get full file content
+						fullContent, err := repo.GetFullFileContent(absPath)
+						if err != nil {
+							logger.GlobalLogger.Debugf("Failure %d - Failed to get full file: %v", index+1, err)
+						} else {
+							failure.Context.FullFileContent = fullContent
+						}
+
 						// Get commits that modified this line
 						lineCommits, err := repo.GetCommitsAffectingLines(relPath, []int{failure.LineNumber}, 3)
 						if err != nil {
@@ -172,6 +190,7 @@ func NewAnalyzeCmd() *cobra.Command {
 								)
 							}
 						}
+
 					}
 				}
 			}
