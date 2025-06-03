@@ -90,55 +90,56 @@ func (r *Repository) GetLineChanges(path string, line int) (string, error) {
 		return "", err
 	}
 
-	// Get the diff for this commit
-	var parent *object.Commit
-	if commit.NumParents() > 0 {
-		parent, err = commit.Parent(0)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		// Handle initial commit case
-		return blame.Lines[line-1].Text, nil
+	// Handle initial commit or file creation case
+	if commit.NumParents() == 0 {
+		return fmt.Sprintf("+ %s (file created in this commit)", blame.Lines[line-1].Text), nil
 	}
 
+	parent, err := commit.Parent(0)
+	if err != nil {
+		return "", err
+	}
+
+	// Check if file was added in this commit
+	_, err = parent.File(path)
+	if err == object.ErrFileNotFound {
+		return fmt.Sprintf("+ %s (file added in this commit)", blame.Lines[line-1].Text), nil
+	} else if err != nil {
+		return "", err
+	}
+
+	// Get diff for modified files
 	patch, err := parent.Patch(commit)
 	if err != nil {
 		return "", err
 	}
 
-	// Find changes affecting our line
 	var changes strings.Builder
-	targetLine := strings.TrimSpace(blame.Lines[line-1].Text)
+	targetLine := blame.Lines[line-1]
 
 	for _, filePatch := range patch.FilePatches() {
-		if filePatch.IsBinary() {
-			continue
-		}
-
 		_, to := filePatch.Files()
 		if to == nil || to.Path() != path {
 			continue
 		}
 
+		// Get line numbers from chunk headers
 		for _, chunk := range filePatch.Chunks() {
-			chunkContent := strings.TrimSpace(chunk.Content())
-			if chunkContent == targetLine {
-				// Determine operation type
+			if strings.Contains(chunk.Content(), targetLine.Text) {
 				switch chunk.Type() {
 				case diff.Delete:
-					changes.WriteString(fmt.Sprintf("- %s\n", chunkContent))
+					changes.WriteString(fmt.Sprintf("- %s\n", strings.TrimSpace(chunk.Content())))
 				case diff.Add:
-					changes.WriteString(fmt.Sprintf("+ %s\n", chunkContent))
+					changes.WriteString(fmt.Sprintf("+ %s\n", strings.TrimSpace(chunk.Content())))
 				case diff.Equal:
-					changes.WriteString(fmt.Sprintf("  %s\n", chunkContent))
+					changes.WriteString(fmt.Sprintf("  %s\n", strings.TrimSpace(chunk.Content())))
 				}
 			}
 		}
 	}
 
 	if changes.Len() == 0 {
-		return blame.Lines[line-1].Text, nil
+		return fmt.Sprintf("  %s (no changes in this commit)", targetLine.Text), nil
 	}
 
 	return changes.String(), nil
