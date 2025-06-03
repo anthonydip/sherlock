@@ -3,6 +3,7 @@ package parsers
 import (
 	"fmt"
 
+	"github.com/anthonydip/sherlock/internal/git"
 	"github.com/anthonydip/sherlock/internal/logger"
 )
 
@@ -13,6 +14,9 @@ type TestFailure struct {
 	Location    string
 	FullMessage string
 	LineNumber  int
+
+	CodeChanges    string
+	RelatedCommits []git.CommitInfo
 }
 
 type Parser interface {

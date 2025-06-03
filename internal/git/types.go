@@ -17,4 +17,5 @@ type CommitInfo struct {
 	Date    time.Time
 	Message string
 	Changes []string
+	Diff    string
 }

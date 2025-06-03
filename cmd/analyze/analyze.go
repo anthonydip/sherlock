@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/anthonydip/sherlock/internal/cli"
 	"github.com/anthonydip/sherlock/internal/git"
@@ -115,35 +116,64 @@ func NewAnalyzeCmd() *cobra.Command {
 				}
 
 				// Get commit history for the affected files
-				for _, failure := range failures {
+				for index, failure := range failures {
 					// Convert absolute path to repo-relative path
 					relPath, err := git.NormalizeTestPath(failure.Location, repo.Path())
 					if err != nil {
-						logger.GlobalLogger.Errorf("Failed to normalize path: %v", err)
+						logger.GlobalLogger.Errorf("Failure %d - Failed to normalize path: %v", index+1, err)
 						continue
 					}
 
-					logger.GlobalLogger.Debugf("Analyzing failure in: %s", relPath)
+					logger.GlobalLogger.Debugf("Failure %d - Analyzing failure in: %s", index+1, relPath)
 
+					// Get Git commit history for the affected file
 					commitHistory, err := repo.GetEnhancedFileHistory(relPath, 3)
 					if err != nil {
-						logger.GlobalLogger.Errorf("Failed to get commit history: %v", err)
+						logger.GlobalLogger.Errorf("Failure %d - Failed to get commit history: %v", index+1, err)
 						return err
 					}
 
 					// Log the commit information
 					for _, commit := range commitHistory {
-						logger.GlobalLogger.Verbosef("Related commit for %s: %s by %s at %s",
+						logger.GlobalLogger.Verbosef("Failure %d - Related commit for %s: %s by %s at %s",
+							index+1,
 							failure.TestName,
 							commit.Hash[:7],
 							commit.Author,
 							commit.Date.Format("2006-01-02"),
 						)
-						logger.GlobalLogger.Debugf("Commit message: %s", commit.Message)
-						logger.GlobalLogger.Debugf("Files changed: %v", commit.Changes)
+						logger.GlobalLogger.Debugf("Failure %d - Commit message: %s", index+1, commit.Message)
+						logger.GlobalLogger.Debugf("Failure %d - Files changed: %v", index+1, commit.Changes)
+					}
+
+					// Get line-specific changes if we have a line number
+					if failure.LineNumber > 0 {
+						// Get the exact line changes
+						lineChanges, err := repo.GetLineChanges(relPath, failure.LineNumber)
+						if err != nil {
+							logger.GlobalLogger.Debugf("Failure %d - Failed to get line changes: %v", index+1, err)
+						} else {
+							logger.GlobalLogger.Debugf("Failure %d - Line changes:\n%s", index+1, lineChanges)
+							failure.CodeChanges = lineChanges
+						}
+
+						// Get commits that modified this line
+						lineCommits, err := repo.GetCommitsAffectingLines(relPath, []int{failure.LineNumber}, 3)
+						if err != nil {
+							logger.GlobalLogger.Debugf("Failure %d - Failed to get line-specific commits: %v", index+1, err)
+						} else {
+							failure.RelatedCommits = lineCommits
+							for _, commit := range lineCommits {
+								logger.GlobalLogger.Verbosef("Failure %d - Line %d modified in commit %s: %s",
+									index+1,
+									failure.LineNumber,
+									commit.Hash[:7],
+									strings.Split(commit.Message, "\n")[0],
+								)
+							}
+						}
 					}
 				}
-
 			}
 		}
 
