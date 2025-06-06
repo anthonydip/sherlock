@@ -18,10 +18,12 @@ type TestFailure struct {
 	CodeChanges    string
 	RelatedCommits []git.CommitInfo
 
-	Context struct {
-		SurroundingCode string
-		FullFileContent string
-	}
+	Context *TestFailureContext
+}
+
+type TestFailureContext struct {
+	SurroundingCode string
+	FullFileContent string
 }
 
 type Parser interface {

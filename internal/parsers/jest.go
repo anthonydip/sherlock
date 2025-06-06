@@ -116,31 +116,24 @@ func (j *JestParser) Parse() ([]TestFailure, error) {
 func extractFailure(suite TestSuite, test AssertionResult, message string) TestFailure {
 	cleanMsg := stripANSI(message)
 
-	// First try to extract underlying error from matcher format
-	if underlying := extractUnderlyingError(cleanMsg); underlying != "" {
-		location := findLocation(cleanMsg)
-		lineNumber := extractLineNumber(location)
-		return TestFailure{
-			File:        suite.Name,
-			TestName:    buildTestName(test.AncestorTitles, test.Title),
-			Error:       underlying,
-			Location:    location,
-			FullMessage: cleanMsg,
-			LineNumber:  lineNumber,
-		}
-	}
-
-	// Fall back to standard error extraction
-	errorMsg, location := extractErrorDetails(cleanMsg)
-	lineNumber := extractLineNumber(location)
-	return TestFailure{
+	failure := TestFailure{
 		File:        suite.Name,
 		TestName:    buildTestName(test.AncestorTitles, test.Title),
-		Error:       errorMsg,
-		Location:    location,
 		FullMessage: cleanMsg,
-		LineNumber:  lineNumber,
+		Context:     &TestFailureContext{},
 	}
+
+	// First try to extract underlying error from matcher format
+	if underlying := extractUnderlyingError(cleanMsg); underlying != "" {
+		failure.Error = underlying
+		failure.Location = findLocation(cleanMsg)
+		failure.LineNumber = extractLineNumber(failure.Location)
+	} else {
+		failure.Error, failure.Location = extractErrorDetails(cleanMsg)
+		failure.LineNumber = extractLineNumber(failure.Location)
+	}
+
+	return failure
 }
 
 func stripANSI(message string) string {

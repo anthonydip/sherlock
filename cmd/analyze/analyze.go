@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/anthonydip/sherlock/internal/ai"
 	"github.com/anthonydip/sherlock/internal/cli"
 	"github.com/anthonydip/sherlock/internal/git"
 	"github.com/anthonydip/sherlock/internal/logger"
@@ -120,7 +121,9 @@ func NewAnalyzeCmd() *cobra.Command {
 				}
 
 				// Get commit history for the affected files
-				for index, failure := range failures {
+				for index := range failures {
+					failure := &failures[index]
+
 					// Convert absolute path to repo-relative path
 					relPath, err := git.NormalizeTestPath(failure.Location, repo.Path())
 					if err != nil {
@@ -155,7 +158,7 @@ func NewAnalyzeCmd() *cobra.Command {
 						// Get the exact line changes
 						lineChanges, err := repo.GetLineChanges(relPath, failure.LineNumber)
 						if err != nil {
-							logger.GlobalLogger.Debugf("Failure %d - Failed to get line changes: %v", index+1, err)
+							logger.GlobalLogger.Errorf("Failure %d - Failed to get line changes: %v", index+1, err)
 						} else {
 							logger.GlobalLogger.Debugf("Failure %d - Line changes:\n%s", index+1, lineChanges)
 							failure.CodeChanges = lineChanges
@@ -165,16 +168,17 @@ func NewAnalyzeCmd() *cobra.Command {
 						absPath := filepath.Join(repo.Path(), relPath)
 						context, err := repo.GetCodeContext(absPath, failure.LineNumber, contextLines)
 						if err != nil {
-							logger.GlobalLogger.Debugf("Failure %d - Failed to get code context: %v", index+1, err)
+							logger.GlobalLogger.Errorf("Failure %d - Failed to get code context: %v", index+1, err)
 						} else {
 							failure.Context.SurroundingCode = context
 							logger.GlobalLogger.Debugf("Failure %d - Code context:\n%s", index+1, context)
 						}
 
 						// Get full file content
+						// NOTE: Will be expensive if working with large files
 						fullContent, err := repo.GetFullFileContent(absPath)
 						if err != nil {
-							logger.GlobalLogger.Debugf("Failure %d - Failed to get full file: %v", index+1, err)
+							logger.GlobalLogger.Errorf("Failure %d - Failed to get full file: %v", index+1, err)
 						} else {
 							failure.Context.FullFileContent = fullContent
 						}
@@ -197,6 +201,16 @@ func NewAnalyzeCmd() *cobra.Command {
 
 					}
 				}
+
+				logger.GlobalLogger.Verbosef("Generating prompts for AI analysis")
+
+				// Prepare data for AI analysis
+				for i, failure := range failures {
+					prompt := ai.GeneratePrompt(failure)
+
+					logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
+				}
+
 			}
 		}
 
