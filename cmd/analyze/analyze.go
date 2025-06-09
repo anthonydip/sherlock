@@ -16,6 +16,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
+type AIOptions struct {
+	Provider string
+	Model    string
+	APIKey   string
+}
+
 func NewAnalyzeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "analyze [test-output]",
@@ -31,14 +37,21 @@ func NewAnalyzeCmd() *cobra.Command {
 		},
 	}
 
-	// Define analyze command flags
-	cmd.Flags().StringP("api-key", "k", "", "OpenAI api key")
+	// Parser flags
 	cmd.Flags().StringP("parser", "p", "auto", "test parser to use (jest, pytest, mocha, auto)")
+
+	// Git flags
 	cmd.Flags().Int("git-depth", 5, "maximum parent directory levels to search for .git (default: 5)")
 	cmd.Flags().Int("context-lines", 3, "number of surrounding code lines to include in analysis (default: 3)")
 	cmd.Flags().Int("commit-depth", 3, "number of historical commits to analyze (default: 3)")
 	cmd.Flags().Bool("force", false, "proceed analysis with uncommitted changes")
 	cmd.Flags().Bool("no-git", false, "skip Git integration entirely (repository detection and change analysis)")
+
+	// AI flags
+	cmd.Flags().StringP("api-key", "k", "", "AI API key override (openai|groq)")
+	cmd.Flags().StringP("model", "m", "", "ai model to use (default: gpt-3.5-turbo|llama3-70b-8192)")
+	cmd.Flags().String("ai-provider", "", "ai provider to use (openai|groq)")
+	cmd.Flags().BoolP("batch", "b", false, "batch multiple test failures into one AI request (default: false)")
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		option := cli.StripInvalidFlag(err)
@@ -52,15 +65,23 @@ func NewAnalyzeCmd() *cobra.Command {
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		testOutput := args[0]
-		// apiKey, _ := cmd.Flags().GetString("api-key")
 		parserName, _ := cmd.Flags().GetString("parser")
 		force, _ := cmd.Flags().GetBool("force")
 		depth, _ := cmd.Flags().GetInt("git-depth")
 		contextLines, _ := cmd.Flags().GetInt("context-lines")
 		commitDepth, _ := cmd.Flags().GetInt("commit-depth")
 		noGit, _ := cmd.Flags().GetBool("no-git")
+		batch, _ := cmd.Flags().GetBool("batch")
+
+		aiOpts, err := getAIOptions(cmd)
+		if err != nil {
+			logger.GlobalLogger.Errorf("%s", err)
+			return err
+		}
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
+
+		logger.GlobalLogger.Verbosef("Detected AI options: %s and %s", aiOpts.Provider, aiOpts.Model)
 
 		// Parser selection
 		logger.GlobalLogger.Debugf("Selecting '%s' parser", parserName)
@@ -204,11 +225,18 @@ func NewAnalyzeCmd() *cobra.Command {
 
 				logger.GlobalLogger.Verbosef("Generating prompts for AI analysis")
 
-				// Prepare data for AI analysis
-				for i, failure := range failures {
-					prompt := ai.GeneratePrompt(failure)
+				if batch {
+					// Batch multiple test failures into one request
+					prompt := ai.GenerateBatchPrompt(failures)
+					logger.GlobalLogger.Debugf("Generated prompt for failure(s):\n%s", prompt)
 
-					logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
+				} else {
+					// Generate prompt for each test failure
+					for i, failure := range failures {
+						prompt := ai.GeneratePrompt(failure)
+
+						logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
+					}
 				}
 
 			}
@@ -230,20 +258,103 @@ func generateOptionGroups(cmd *cobra.Command) []cli.FlagGroup {
 			},
 		},
 		{
-			Name: "AI options",
+			Name: "Git options",
 			Flags: []*pflag.Flag{
-				cmd.Flags().Lookup("api-key"),
+				cmd.Flags().Lookup("git-depth"),
+				cmd.Flags().Lookup("context-lines"),
+				cmd.Flags().Lookup("commit-depth"),
+				cmd.Flags().Lookup("force"),
+				cmd.Flags().Lookup("no-git"),
 			},
 		},
 		{
-			Name: "Git options",
+			Name: "AI options",
 			Flags: []*pflag.Flag{
-				cmd.Flags().Lookup("depth"),
-				cmd.Flags().Lookup("force"),
-				cmd.Flags().Lookup("no-git"),
+				cmd.Flags().Lookup("api-key"),
+				cmd.Flags().Lookup("model"),
+				cmd.Flags().Lookup("ai-provider"),
+				cmd.Flags().Lookup("batch"),
 			},
 		},
 	}
 
 	return groups
+}
+
+func getAIOptions(cmd *cobra.Command) (AIOptions, error) {
+	opts := AIOptions{
+		Provider: cmd.Flag("ai-provider").Value.String(),
+		Model:    cmd.Flag("model").Value.String(),
+	}
+
+	// Get API key (flag takes precedence over env vars)
+	apiKey, err := getAPIKey(cmd, opts.Provider)
+	if err != nil {
+		return AIOptions{}, err
+	}
+	opts.APIKey = apiKey
+
+	// Auto-detect provider if not specified
+	if opts.Provider == "" {
+		opts.Provider, err = detectProviderFromKey(opts.APIKey)
+		if err != nil {
+			return AIOptions{}, err
+		}
+	} else {
+		// Check for invalid provider provided
+		if opts.Provider != "groq" && opts.Provider != "openai" {
+			return AIOptions{}, fmt.Errorf("Invalid ai provider: %s", opts.Provider)
+		}
+	}
+
+	// Set default model if not specified
+	if opts.Model == "" {
+		opts.Model = getDefaultModel(opts.Provider)
+	}
+
+	return opts, nil
+}
+
+func getAPIKey(cmd *cobra.Command, provider string) (string, error) {
+	if key := cmd.Flag("api-key").Value.String(); key != "" {
+		return key, nil
+	}
+
+	switch provider {
+	case "groq":
+		return os.Getenv("GROQ_API_KEY"), nil
+	case "openai":
+		return os.Getenv("OPENAI_API_KEY"), nil
+	default:
+		if key := os.Getenv("GROQ_API_KEY"); key != "" {
+			return key, nil
+		}
+		if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+			return key, nil
+		}
+	}
+
+	return "", fmt.Errorf("No API key provided (use --api-key or set %s_API_KEY)", strings.ToUpper(provider))
+}
+
+func detectProviderFromKey(key string) (string, error) {
+	switch {
+	case strings.HasPrefix(key, "gsk_"):
+		return "groq", nil
+	case strings.HasPrefix(key, "sk-"):
+		return "openai", nil
+	default:
+		return "", fmt.Errorf("Unable to detect provider from key format")
+	}
+}
+
+func getDefaultModel(provider string) string {
+	switch provider {
+	case "groq":
+		return "llama3-70b-8192"
+	case "openai":
+		return "gpt-3.5-turbo"
+	default:
+		return "llama3-70b-8192" // Fallback to Groq free model
+	}
 }
