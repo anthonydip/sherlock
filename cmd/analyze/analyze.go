@@ -16,12 +16,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-type AIOptions struct {
-	Provider string
-	Model    string
-	APIKey   string
-}
-
 func NewAnalyzeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "analyze [test-output]",
@@ -81,7 +75,7 @@ func NewAnalyzeCmd() *cobra.Command {
 
 		logger.GlobalLogger.Debugf("Starting analysis of %s", testOutput)
 
-		logger.GlobalLogger.Verbosef("Detected AI options: %s and %s", aiOpts.Provider, aiOpts.Model)
+		logger.GlobalLogger.Debugf("Detected AI options: %s and %s", aiOpts.Provider, aiOpts.Model)
 
 		// Parser selection
 		logger.GlobalLogger.Debugf("Selecting '%s' parser", parserName)
@@ -230,12 +224,28 @@ func NewAnalyzeCmd() *cobra.Command {
 					prompt := ai.GenerateBatchPrompt(failures)
 					logger.GlobalLogger.Debugf("Generated prompt for failure(s):\n%s", prompt)
 
+					aiClient, err := ai.NewAIClient(aiOpts)
+					if err != nil {
+						logger.GlobalLogger.Errorf("Failed to create AI client: %v", err)
+					}
+					logger.GlobalLogger.Verbosef("Initialized AI Client for %s with %s", aiOpts.Provider, aiOpts.Model)
+
+					aiClient.AnalyzeTestFailure(prompt)
+
 				} else {
+					aiClient, err := ai.NewAIClient(aiOpts)
+					if err != nil {
+						logger.GlobalLogger.Errorf("Failed to create AI client: %v", err)
+					}
+					logger.GlobalLogger.Verbosef("Initialized AI Client for %s with %s", aiOpts.Provider, aiOpts.Model)
+
 					// Generate prompt for each test failure
 					for i, failure := range failures {
 						prompt := ai.GeneratePrompt(failure)
 
 						logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
+
+						aiClient.AnalyzeTestFailure(prompt)
 					}
 				}
 
@@ -281,8 +291,8 @@ func generateOptionGroups(cmd *cobra.Command) []cli.FlagGroup {
 	return groups
 }
 
-func getAIOptions(cmd *cobra.Command) (AIOptions, error) {
-	opts := AIOptions{
+func getAIOptions(cmd *cobra.Command) (ai.AIOptions, error) {
+	opts := ai.AIOptions{
 		Provider: cmd.Flag("ai-provider").Value.String(),
 		Model:    cmd.Flag("model").Value.String(),
 	}
@@ -290,7 +300,7 @@ func getAIOptions(cmd *cobra.Command) (AIOptions, error) {
 	// Get API key (flag takes precedence over env vars)
 	apiKey, err := getAPIKey(cmd, opts.Provider)
 	if err != nil {
-		return AIOptions{}, err
+		return ai.AIOptions{}, err
 	}
 	opts.APIKey = apiKey
 
@@ -298,12 +308,12 @@ func getAIOptions(cmd *cobra.Command) (AIOptions, error) {
 	if opts.Provider == "" {
 		opts.Provider, err = detectProviderFromKey(opts.APIKey)
 		if err != nil {
-			return AIOptions{}, err
+			return ai.AIOptions{}, err
 		}
 	} else {
 		// Check for invalid provider provided
 		if opts.Provider != "groq" && opts.Provider != "openai" {
-			return AIOptions{}, fmt.Errorf("Invalid ai provider: %s", opts.Provider)
+			return ai.AIOptions{}, fmt.Errorf("Invalid ai provider: %s", opts.Provider)
 		}
 	}
 
