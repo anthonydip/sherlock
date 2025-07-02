@@ -230,8 +230,12 @@ func NewAnalyzeCmd() *cobra.Command {
 					}
 					logger.GlobalLogger.Verbosef("Initialized AI Client for %s with %s", aiOpts.Provider, aiOpts.Model)
 
-					aiClient.AnalyzeTestFailure(prompt)
-
+					aiResponse, err := aiClient.AnalyzeTestFailure(prompt)
+					if err != nil {
+						logger.GlobalLogger.Errorf("AI request failed: %v", err)
+					} else {
+						logger.GlobalLogger.Successf("AI response:\n%s", aiResponse)
+					}
 				} else {
 					aiClient, err := ai.NewAIClient(aiOpts)
 					if err != nil {
@@ -245,7 +249,12 @@ func NewAnalyzeCmd() *cobra.Command {
 
 						logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
 
-						aiClient.AnalyzeTestFailure(prompt)
+						aiResponse, err := aiClient.AnalyzeTestFailure(prompt)
+						if err != nil {
+							logger.GlobalLogger.Errorf("AI request failed: %v", err)
+						} else {
+							logger.GlobalLogger.Successf("AI response:\n%s", aiResponse)
+						}
 					}
 				}
 
