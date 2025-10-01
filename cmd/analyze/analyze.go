@@ -46,6 +46,7 @@ func NewAnalyzeCmd() *cobra.Command {
 	cmd.Flags().StringP("model", "m", "", "ai model to use (default: gpt-3.5-turbo|llama3-70b-8192)")
 	cmd.Flags().String("ai-provider", "", "ai provider to use (openai|groq)")
 	cmd.Flags().BoolP("batch", "b", false, "batch multiple test failures into one AI request (default: false)")
+	cmd.Flags().StringP("output", "o", "", "write output to file (default: .md)")
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		option := cli.StripInvalidFlag(err)
@@ -66,6 +67,8 @@ func NewAnalyzeCmd() *cobra.Command {
 		commitDepth, _ := cmd.Flags().GetInt("commit-depth")
 		noGit, _ := cmd.Flags().GetBool("no-git")
 		batch, _ := cmd.Flags().GetBool("batch")
+		outputPath, _ := cmd.Flags().GetString("output")
+		usingOutputFlag := cmd.Flags().Changed("output")
 
 		aiOpts, err := getAIOptions(cmd)
 		if err != nil {
@@ -227,15 +230,39 @@ func NewAnalyzeCmd() *cobra.Command {
 					aiClient, err := ai.NewAIClient(aiOpts)
 					if err != nil {
 						logger.GlobalLogger.Errorf("Failed to create AI client: %v", err)
+						return err
 					}
 					logger.GlobalLogger.Verbosef("Initialized AI Client for %s with %s", aiOpts.Provider, aiOpts.Model)
 
-					aiClient.AnalyzeTestFailure(prompt)
+					aiResponse, err := aiClient.AnalyzeTestFailure(prompt)
+					if err != nil {
+						logger.GlobalLogger.Errorf("AI request failed: %v", err)
+						return err
+					}
+
+					if !usingOutputFlag {
+						// Output AI response to terminal
+						logger.GlobalLogger.Successf("%v\n", aiResponse)
+					} else {
+						// Write AI response to file
+						if filepath.Ext(outputPath) != ".md" {
+							originalPath := outputPath
+							outputPath += ".md"
+							logger.GlobalLogger.Warnf("Output file should use .md extension. Changed '%s' → '%s'", originalPath, outputPath)
+						}
+
+						if err := os.WriteFile(outputPath, []byte(aiResponse), 0644); err != nil {
+							logger.GlobalLogger.Errorf("Failed to write AI response to file: %v", err)
+							return err
+						}
+						logger.GlobalLogger.Verbosef("AI analysis saved to %s", outputPath)
+					}
 
 				} else {
 					aiClient, err := ai.NewAIClient(aiOpts)
 					if err != nil {
 						logger.GlobalLogger.Errorf("Failed to create AI client: %v", err)
+						return err
 					}
 					logger.GlobalLogger.Verbosef("Initialized AI Client for %s with %s", aiOpts.Provider, aiOpts.Model)
 
@@ -245,10 +272,31 @@ func NewAnalyzeCmd() *cobra.Command {
 
 						logger.GlobalLogger.Debugf("Generated prompt for failure %d:\n%s", i+1, prompt)
 
-						aiClient.AnalyzeTestFailure(prompt)
+						aiResponse, err := aiClient.AnalyzeTestFailure(prompt)
+						if err != nil {
+							logger.GlobalLogger.Errorf("AI request failed: %v", err)
+							return err
+						}
+
+						if !usingOutputFlag {
+							// Output AI response to terminal
+							logger.GlobalLogger.Successf("%v\n", aiResponse)
+						} else {
+							// Write AI response to file
+							if filepath.Ext(outputPath) != ".md" {
+								originalPath := outputPath
+								outputPath += ".md"
+								logger.GlobalLogger.Warnf("Output file should use .md extension. Changed '%s' → '%s'", originalPath, outputPath)
+							}
+
+							if err := os.WriteFile(outputPath, []byte(aiResponse), 0644); err != nil {
+								logger.GlobalLogger.Errorf("Failed to write AI response to file: %v", err)
+								return err
+							}
+							logger.GlobalLogger.Verbosef("AI analysis saved to %s", outputPath)
+						}
 					}
 				}
-
 			}
 		}
 
@@ -284,6 +332,7 @@ func generateOptionGroups(cmd *cobra.Command) []cli.FlagGroup {
 				cmd.Flags().Lookup("model"),
 				cmd.Flags().Lookup("ai-provider"),
 				cmd.Flags().Lookup("batch"),
+				cmd.Flags().Lookup("output"),
 			},
 		},
 	}
